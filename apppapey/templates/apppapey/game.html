@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Papey Online</title>
+<style>
+body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden}
+#ui{position:fixed;top:10px;left:50%;transform:translateX(-50%);color:white;font:bold 20px Arial;background:rgba(0,0,0,.5);padding:5px 15px;border-radius:10px;display:none}
+#gameover{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);justify-content:center;align-items:center;flex-direction:column;color:white;font:bold 60px Arial;text-align:center}
+#gameover button{font-size:28px;margin-top:30px;padding:15px 40px;cursor:pointer;border:none;border-radius:10px;background:white;color:black}
+#game{border:1px solid grey;display:none}
+#leaderboard{position:fixed;top:10px;right:10px;color:white;font:14px Arial;background:rgba(0,0,0,.5);padding:10px 14px;border-radius:10px;display:none;min-width:140px}
+#leaderboard div{display:flex;align-items:center;gap:6px;margin:3px 0}
+#leaderboard .swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+#modeSelect{display:flex;flex-direction:column;gap:20px;align-items:center}
+#modeSelect button{font:bold 24px Arial;padding:20px 50px;cursor:pointer;border:none;border-radius:10px;background:white;color:black}
+</style>
+</head>
+<body>
+<div id="modeSelect">
+  <button onclick="startGame('cpu')">Play vs CPUs</button>
+  <div>
+    <button onclick="startGame('online')">Play Online</button>
+    <div id="onlineStatus" style="color:#ccc;font:14px Arial;margin-top:6px;text-align:center">checking who's online…</div>
+  </div>
+</div>
+<div id="ui">0% covered</div>
+<div id="leaderboard"></div>
+<div id="gameover">
+  <span id="gameoverTitle">GAME OVER</span>
+  <br><span id="deathMsg" style="font-size:26px"></span>
+  <br><button onclick="location.reload()">Play Again</button>
+</div>
+<canvas id="game" width="750" height="500"></canvas>
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const ui=document.getElementById('ui'),leaderboardEl=document.getElementById('leaderboard');
+const gameoverEl=document.getElementById('gameover'),deathMsg=document.getElementById('deathMsg'),gameoverTitle=document.getElementById('gameoverTitle');
+
+const W=4000,H=4000,VIEWW=750,VIEWH=500,ZOOM=1.6;
+const COLORS=['blue','red','green','orange','purple','cyan','deeppink','gold','lime','coral'];
+const opposite={left:'right',right:'left',up:'down',down:'up'};
+const speed=3;
+let mode=null,direction=null,alive=true,frames=0,ws=null,myId=null;
+
+const usedColorSet=new Set();
+function claimColor(color){usedColorSet.add(color);return color;}
+function releaseColor(color){usedColorSet.delete(color);}
+function nextFreeColor(){
+  for(const c of COLORS)if(!usedColorSet.has(c))return claimColor(c);
+  const h=Math.floor(Math.random()*360);
+  const c=`hsl(${h},100%,50%)`;
+  usedColorSet.add(c);
+  return c;
+}
+
+(function checkOnlineStatus(){
+  try{
+    const peek=new WebSocket(`ws://${location.host}/ws/game/`);
+    peek.onmessage=e=>{
+      const d=JSON.parse(e.data);
+      if('totalOnline' in d){
+        const n=d.totalOnline-1;
+        document.getElementById('onlineStatus').textContent=
+          n>0?`${n} player${n===1?'':'s'} online`:'nobody online right now — you can still play solo';
+        peek.close();
+      }
+    };
+    peek.onerror=()=>document.getElementById('onlineStatus').textContent='';
+  }catch(e){}
+})();
+
+function makeEntity(x,y,color){
+  const c=document.createElement('canvas');
+  c.width=W;c.height=H;
+  const cx=c.getContext('2d');
+  cx.fillStyle=color;cx.globalAlpha=0.4;cx.fillRect(x-20,y-20,40,40);
+  cx.globalAlpha=1;cx.strokeStyle=color;cx.lineWidth=3;cx.strokeRect(x-20,y-20,40,40);
+  return{x,y,color,trail:[],alive:true,outside:false,
+         canvas:c,ctx:cx,homeX:x,homeY:y,filledPixels:1600,
+         dir:null,timer:0};
+}
+
+claimColor(COLORS[0]);
+const player=makeEntity(W/2,H/2,COLORS[0]);
+const entities=[player];
+const remotePlayers={};
+
+const CPU_COUNT=9;
+
+function spotIsFree(x,y){
+  if(x<60||x>W-60||y<60||y>H-60)return false;
+  for(const e of entities){
+    if(!e.alive)continue;
+    const d=e.ctx.getImageData(x-25,y-25,50,50).data;
+    for(let i=3;i<d.length;i+=4)if(d[i]>0)return false;
+  }
+  return true;
+}
+
+function findFreeSpawnSpot(){
+  for(let i=0;i<60;i++){
+    const x=60+Math.random()*(W-120),y=60+Math.random()*(H-120);
+    if(spotIsFree(x,y))return{x,y};
+  }
+  return null;
+}
+
+function startCpuMode(){
+  entities.push(makeEntity(player.x+120,player.y-120,nextFreeColor()));
+  for(let i=1;i<CPU_COUNT;i++){
+    const s=findFreeSpawnSpot();
+    if(s)entities.push(makeEntity(s.x,s.y,nextFreeColor()));
+  }
+}
+
+function scheduleReplacementCpu(deadColor){
+  releaseColor(deadColor);
+  setTimeout(()=>{
+    if(mode!=='cpu')return;
+    const s=findFreeSpawnSpot();
+    if(s){
+      const color=nextFreeColor();
+      entities.push(makeEntity(s.x,s.y,color));
+    }
+  },1500);
+}
+
+function moved(e,d){
+  return{
+    x:e.x-(d==='left')*speed+(d==='right')*speed,
+    y:e.y-(d==='up')*speed+(d==='down')*speed
+  };
+}
+
+function scoreCpuDir(cpu,d){
+  const p=moved(cpu,d);
+  if(p.x<10||p.x>W-25||p.y<10||p.y>H-25)return-Infinity;
+  if(d===opposite[cpu.dir])return-Infinity;
+  if(nearTrailPoint(cpu.trail,p.x+7,p.y+7,10))return-Infinity;
+
+  const distHome=Math.hypot(p.x-cpu.homeX,p.y-cpu.homeY);
+  const curDist =Math.hypot(cpu.x-cpu.homeX,cpu.y-cpu.homeY);
+  const trailLen=cpu.trail.length;
+
+  let score=0;
+  if(!cpu.outside){
+    score+=(distHome-curDist)*2;
+  } else if(trailLen<25){
+    score+=(distHome-curDist)*2;
+    if(d===cpu.dir)score+=1;
+  } else {
+    score+=(curDist-distHome)*3;
+    if(d===cpu.dir)score+=1;
+    if(trailLen>60)score+=(trailLen-60)*0.8;
+  }
+  return score;
+}
+
+function chooseCpuDir(cpu){
+  let best=null,bestScore=-Infinity;
+  for(const d of['left','right','up','down']){
+    const s=scoreCpuDir(cpu,d);
+    if(s>bestScore){bestScore=s;best=d;}
+  }
+  return best;
+}
+
+function updateCpu(cpu){
+  if(!cpu.alive)return;
+  cpu.timer=(cpu.timer||0)+1;
+
+  const currentBlocked=!cpu.dir||scoreCpuDir(cpu,cpu.dir)===-Infinity;
+  const timeToRethink=cpu.timer>8+Math.random()*7;
+  const nearWall=cpu.x<30||cpu.x>W-45||cpu.y<30||cpu.y>H-45;
+  const trailTooLong=cpu.outside&&cpu.trail.length>35;
+
+  if(currentBlocked||timeToRethink||nearWall||trailTooLong){
+    const best=chooseCpuDir(cpu);
+    if(best!==null){cpu.dir=best;cpu.timer=0;}
+  }
+
+  if(scoreCpuDir(cpu,cpu.dir)===-Infinity){
+    const fallback=chooseCpuDir(cpu);
+    if(fallback)cpu.dir=fallback;
+  }
+
+  const p=moved(cpu,cpu.dir||'right');
+  cpu.x=Math.max(0,Math.min(W-15,p.x));
+  cpu.y=Math.max(0,Math.min(H-15,p.y));
+
+  if(!isInOwnTerritory(cpu))cpu.outside=true;
+  if(cpu.outside&&isInOwnTerritory(cpu)){fillEnclosed(cpu);return;}
+  if(cpu.outside&&checkOwnTrailHit(cpu)){const c=cpu.color;killEntity(cpu);scheduleReplacementCpu(c);return;}
+  checkGotRunInto(cpu);
+  if(!cpu.alive){scheduleReplacementCpu(cpu.color);return;}
+  if(cpu.outside)cpu.trail.push({x:cpu.x+7,y:cpu.y+7});
+}
+
+function startOnlineMode(){
+  ws=new WebSocket(`ws://${location.host}/ws/game/`);
+  ws.onmessage=event=>{
+    const data=JSON.parse(event.data);
+    if(data.myId){myId=data.myId;return;}
+    for(const id in data){
+      if(id===myId)continue;
+      if(!remotePlayers[id]){
+        const color=nextFreeColor();
+        const rp=makeEntity(data[id].x,data[id].y,color);
+        remotePlayers[id]=rp;
+        entities.push(rp);
+      }
+      Object.assign(remotePlayers[id],{x:data[id].x,y:data[id].y,
+        trail:data[id].trail,outside:data[id].trail.length>0});
+    }
+    for(const id in remotePlayers){
+      if(!(id in data)){
+        releaseColor(remotePlayers[id].color);
+        entities.splice(entities.indexOf(remotePlayers[id]),1);
+        delete remotePlayers[id];
+      }
+    }
+  };
+}
+
+function sendMyState(){
+  if(ws&&ws.readyState===WebSocket.OPEN)
+    ws.send(JSON.stringify({x:player.x,y:player.y,trail:player.trail}));
+}
+
+function isInOwnTerritory(e){
+  const px=Math.floor(e.x+7),py=Math.floor(e.y+7);
+  if(px<0||px>=W||py<0||py>=H)return false;
+  return e.ctx.getImageData(px,py,1,1).data[3]>0;
+}
+
+function die(reason){
+  alive=false;player.alive=false;
+  gameoverTitle.textContent='GAME OVER';
+  deathMsg.textContent=reason;
+  gameoverEl.style.display='flex';
+  if(ws)ws.close();
+  lbFrame=0;updateLeaderboard();
+}
+
+function win(){
+  alive=false;
+  gameoverTitle.textContent='🎉 YOU WIN!';
+  deathMsg.textContent='100% of the map covered!';
+  gameoverEl.style.display='flex';
+  if(ws)ws.close();
+}
+
+function getPercent(e){return((e.filledPixels||0)/(W*H)*100).toFixed(1);}
+
+let lbFrame=0;
+function updateLeaderboard(){
+  if(++lbFrame%15!==0)return;
+  const ranked=entities.filter(e=>e.alive)
+    .map(e=>({color:e.color,pct:parseFloat(getPercent(e)),isPlayer:e===player}))
+    .sort((a,b)=>b.pct-a.pct);
+  leaderboardEl.innerHTML=ranked.map((r,i)=>
+    `<div><span class="swatch" style="background:${r.color}"></span>#${i+1} ${r.isPlayer?'You':r.color} — ${r.pct}%</div>`).join('');
+}
+
+function killEntity(victim,reason){
+  victim.alive=false;victim.trail=[];
+  if(victim===player)die(reason||'You were eliminated!');
+}
+
+function nearTrailPoint(trail,cx,cy,r,start=0,end=trail.length){
+  for(let i=start;i<end;i++)
+    if(Math.abs(trail[i].x-cx)<r&&Math.abs(trail[i].y-cy)<r)return true;
+  return false;
+}
+
+function checkOwnTrailHit(e){
+  return e.trail.length>=20&&nearTrailPoint(e.trail,e.x+7,e.y+7,6,0,e.trail.length-10);
+}
+
+function checkGotRunInto(self){
+  if(!self.outside||!self.trail.length)return;
+  for(const other of entities){
+    if(other===self||!other.alive)continue;
+    if(nearTrailPoint(self.trail,other.x+7,other.y+7,8))
+      return killEntity(self,'Your trail was cut!');
+  }
+}
+
+// ── FILL ENCLOSED ─────────────────────────────────────────────────────────
+function fillEnclosed(entity){
+  // Draw the trail as a thick stroke onto the territory canvas first,
+  // so it acts as a solid wall connecting the two territory edges.
+  if(entity.trail.length>1){
+    entity.ctx.beginPath();
+    entity.ctx.strokeStyle=entity.color;
+    entity.ctx.lineWidth=15;entity.ctx.lineJoin='miter';entity.ctx.lineCap='square';
+    entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
+    for(let i=1;i<entity.trail.length;i++)entity.ctx.lineTo(entity.trail[i].x,entity.trail[i].y);
+    entity.ctx.stroke();
+    // bridge endpoint to current position to close gap
+    entity.ctx.lineWidth=17;
+    entity.ctx.beginPath();
+    entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
+    entity.ctx.lineTo(entity.x+7,entity.y+7);
+    entity.ctx.stroke();
+  }
+
+  // ── FIX: use the FULL canvas for flood-fill so existing territory
+  // acts as boundary walls on all sides, not just the trail bounding box ──
+  const bx=0,by=0,bw=W,bh=H;
+
+  const imageData=entity.ctx.getImageData(bx,by,bw,bh);
+  const data=imageData.data;
+  const outside=new Uint8Array(bw*bh);
+  const stack=[];
+  // seed flood-fill from all four edges of the full canvas
+  for(let x=0;x<bw;x++){stack.push(x, bw*(bh-1)+x);}
+  for(let y=1;y<bh-1;y++){stack.push(y*bw, y*bw+bw-1);}
+
+  const tmp=document.createElement('canvas');tmp.width=tmp.height=1;
+  const tc=tmp.getContext('2d');
+  tc.fillStyle=entity.color;tc.fillRect(0,0,1,1);
+  const[cr,cg,cb]=tc.getImageData(0,0,1,1).data;
+
+  while(stack.length){
+    const idx=stack.pop();
+    if(idx<0||idx>=bw*bh||outside[idx]||data[idx*4+3]>0)continue;
+    outside[idx]=1;
+    stack.push(idx+1,idx-1,idx+bw,idx-bw);
+  }
+
+  let newlyFilled=0;
+  for(let i=0;i<bw*bh;i++){
+    if(!outside[i]){
+      const pi=i*4;
+      if(data[pi+3]===0)newlyFilled++;
+      data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;
+    }
+  }
+  // flatten all painted pixels to clean color
+  for(let i=0;i<bw*bh;i++){
+    const pi=i*4;
+    if(data[pi+3]>0){
+      data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;
+    }
+  }
+  entity.ctx.putImageData(imageData,bx,by);
+  entity.filledPixels=(entity.filledPixels||0)+newlyFilled;
+
+  for(const other of entities){
+    if(other===entity||!other.alive)continue;
+    const oi=other.ctx.getImageData(bx,by,bw,bh);
+    const od=oi.data;
+    let erased=0;
+    for(let i=0;i<od.length;i+=4){
+      if(data[i+3]>0&&od[i+3]>0){od[i+3]=0;erased++;}
+    }
+    other.ctx.putImageData(oi,bx,by);
+    if(erased)other.filledPixels=Math.max(0,(other.filledPixels||0)-erased);
+  }
+
+  entity.trail=[];entity.outside=false;
+  if(entity===player){
+    const pct=getPercent(player);
+    ui.textContent=pct+'% covered';
+    if(pct>=100)win();
+  }
+}
+
+// ── DRAW ─────────────────────────────────────────────────────────────────
+function drawEntity(e){
+  if(!e.alive)return;
+  ctx.drawImage(e.canvas,0,0);
+  if(e.outside&&e.trail.length>1){
+    ctx.beginPath();
+    ctx.strokeStyle=e.color;ctx.lineWidth=15;ctx.lineJoin='miter';ctx.lineCap='square';
+    ctx.moveTo(e.trail[0].x,e.trail[0].y);
+    for(let i=1;i<e.trail.length;i++)ctx.lineTo(e.trail[i].x,e.trail[i].y);
+    ctx.stroke();
+  }
+  ctx.fillStyle='black';ctx.fillRect(e.x-2,e.y-2,19,19);
+  ctx.fillStyle=e.color;ctx.fillRect(e.x,e.y,15,15);
+}
+
+function draw(){
+  ctx.fillStyle='#111';ctx.fillRect(0,0,VIEWW,VIEWH);
+  ctx.save();
+  ctx.translate(VIEWW/2,VIEWH/2);
+  ctx.scale(ZOOM,ZOOM);
+  ctx.translate(-(player.x+7),-(player.y+7));
+  ctx.fillStyle='#eee';ctx.fillRect(0,0,W,H);
+  entities.forEach(drawEntity);
+  ctx.restore();
+}
+
+// ── GAME LOOP ─────────────────────────────────────────────────────────────
+function gameLoop(){
+  if(!alive){requestAnimationFrame(gameLoop);return;}
+  frames++;
+  const p=direction?moved(player,direction):player;
+  player.x=p.x;player.y=p.y;
+
+  if(frames>30&&(player.x<-5||player.x>W-10||player.y<-5||player.y>H-10))
+    return die('You hit a wall!');
+
+  if(direction){
+    if(!isInOwnTerritory(player))player.outside=true;
+    checkGotRunInto(player);
+    if(!alive)return;
+    if(player.outside&&isInOwnTerritory(player)){
+      fillEnclosed(player);
+    } else if(player.outside){
+      if(checkOwnTrailHit(player))return die('You hit your own trail!');
+      player.trail.push({x:player.x+7,y:player.y+7});
+    }
+  }
+
+  if(mode==='cpu')entities.slice(1).forEach(updateCpu);
+  else sendMyState();
+
+  draw();
+  updateLeaderboard();
+  requestAnimationFrame(gameLoop);
+}
+
+document.addEventListener('keydown',e=>{
+  if(!alive)return;
+  const d={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'}[e.key];
+  if(d&&d!==opposite[direction])direction=d;
+});
+
+function startGame(m){
+  mode=m;
+  document.getElementById('modeSelect').style.display='none';
+  canvas.style.display='block';
+  ui.style.display='block';
+  leaderboardEl.style.display='block';
+  mode==='cpu'?startCpuMode():startOnlineMode();
+  gameLoop();
+}
+</script>
+</body>
+</html>
