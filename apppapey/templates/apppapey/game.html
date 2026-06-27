@@ -17,11 +17,11 @@ body{margin:0;background:#111;display:flex;justify-content:center;align-items:ce
 </head>
 <body>
 <div id="modeSelect">
-  <button onclick="startGame('cpu')">Play vs CPUs</button>
   <div>
     <button onclick="startGame('online')">Play Online</button>
     <div id="onlineStatus" style="color:#ccc;font:14px Arial;margin-top:6px;text-align:center">checking who's online…</div>
   </div>
+  <button style="padding: 8px;font:8px" onclick="startGame('cpu')">Play vs CPUs</button>
 </div>
 <div id="ui">0% covered</div>
 <div id="leaderboard"></div>
@@ -36,10 +36,12 @@ const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
 const ui=document.getElementById('ui'),leaderboardEl=document.getElementById('leaderboard');
 const gameoverEl=document.getElementById('gameover'),deathMsg=document.getElementById('deathMsg'),gameoverTitle=document.getElementById('gameoverTitle');
 
-const W=4000,H=4000,VIEWW=750,VIEWH=500,ZOOM=1.6;
+// ── LOW-RES: world is 1000×1000 instead of 4000×4000 (16× fewer pixels) ──
+const W=1000,H=1000,VIEWW=750,VIEWH=500,ZOOM=4.1;
 const COLORS=['blue','red','green','orange','purple','cyan','deeppink','gold','lime','coral'];
 const opposite={left:'right',right:'left',up:'down',down:'up'};
-const speed=3;
+// Speed scaled down proportionally (was 3 on 4000px world → ~0.75 on 1000px)
+const speed=0.75;
 let mode=null,direction=null,alive=true,frames=0,ws=null,myId=null;
 
 const usedColorSet=new Set();
@@ -69,14 +71,15 @@ function nextFreeColor(){
   }catch(e){}
 })();
 
+// Spawn box scaled from 20px on 4000px → 5px on 1000px
 function makeEntity(x,y,color){
   const c=document.createElement('canvas');
   c.width=W;c.height=H;
   const cx=c.getContext('2d');
-  cx.fillStyle=color;cx.globalAlpha=0.4;cx.fillRect(x-20,y-20,40,40);
-  cx.globalAlpha=1;cx.strokeStyle=color;cx.lineWidth=3;cx.strokeRect(x-20,y-20,40,40);
+  cx.fillStyle=color;cx.globalAlpha=0.4;cx.fillRect(x-5,y-5,10,10);
+  cx.globalAlpha=1;cx.strokeStyle=color;cx.lineWidth=1;cx.strokeRect(x-5,y-5,10,10);
   return{x,y,color,trail:[],alive:true,outside:false,
-         canvas:c,ctx:cx,homeX:x,homeY:y,filledPixels:1600,
+         canvas:c,ctx:cx,homeX:x,homeY:y,filledPixels:100,
          dir:null,timer:0};
 }
 
@@ -88,10 +91,10 @@ const remotePlayers={};
 const CPU_COUNT=9;
 
 function spotIsFree(x,y){
-  if(x<60||x>W-60||y<60||y>H-60)return false;
+  if(x<15||x>W-15||y<15||y>H-15)return false;
   for(const e of entities){
     if(!e.alive)continue;
-    const d=e.ctx.getImageData(x-25,y-25,50,50).data;
+    const d=e.ctx.getImageData(x-6,y-6,12,12).data;
     for(let i=3;i<d.length;i+=4)if(d[i]>0)return false;
   }
   return true;
@@ -99,14 +102,14 @@ function spotIsFree(x,y){
 
 function findFreeSpawnSpot(){
   for(let i=0;i<60;i++){
-    const x=60+Math.random()*(W-120),y=60+Math.random()*(H-120);
+    const x=15+Math.random()*(W-30),y=15+Math.random()*(H-30);
     if(spotIsFree(x,y))return{x,y};
   }
   return null;
 }
 
 function startCpuMode(){
-  entities.push(makeEntity(player.x+120,player.y-120,nextFreeColor()));
+  entities.push(makeEntity(player.x+30,player.y-30,nextFreeColor()));
   for(let i=1;i<CPU_COUNT;i++){
     const s=findFreeSpawnSpot();
     if(s)entities.push(makeEntity(s.x,s.y,nextFreeColor()));
@@ -134,9 +137,9 @@ function moved(e,d){
 
 function scoreCpuDir(cpu,d){
   const p=moved(cpu,d);
-  if(p.x<10||p.x>W-25||p.y<10||p.y>H-25)return-Infinity;
+  if(p.x<3||p.x>W-7||p.y<3||p.y>H-7)return-Infinity;
   if(d===opposite[cpu.dir])return-Infinity;
-  if(nearTrailPoint(cpu.trail,p.x+7,p.y+7,10))return-Infinity;
+  if(nearTrailPoint(cpu.trail,p.x+2,p.y+2,3))return-Infinity;
 
   const distHome=Math.hypot(p.x-cpu.homeX,p.y-cpu.homeY);
   const curDist =Math.hypot(cpu.x-cpu.homeX,cpu.y-cpu.homeY);
@@ -171,7 +174,7 @@ function updateCpu(cpu){
 
   const currentBlocked=!cpu.dir||scoreCpuDir(cpu,cpu.dir)===-Infinity;
   const timeToRethink=cpu.timer>8+Math.random()*7;
-  const nearWall=cpu.x<30||cpu.x>W-45||cpu.y<30||cpu.y>H-45;
+  const nearWall=cpu.x<8||cpu.x>W-12||cpu.y<8||cpu.y>H-12;
   const trailTooLong=cpu.outside&&cpu.trail.length>35;
 
   if(currentBlocked||timeToRethink||nearWall||trailTooLong){
@@ -185,15 +188,15 @@ function updateCpu(cpu){
   }
 
   const p=moved(cpu,cpu.dir||'right');
-  cpu.x=Math.max(0,Math.min(W-15,p.x));
-  cpu.y=Math.max(0,Math.min(H-15,p.y));
+  cpu.x=Math.max(0,Math.min(W-4,p.x));
+  cpu.y=Math.max(0,Math.min(H-4,p.y));
 
   if(!isInOwnTerritory(cpu))cpu.outside=true;
   if(cpu.outside&&isInOwnTerritory(cpu)){fillEnclosed(cpu);return;}
   if(cpu.outside&&checkOwnTrailHit(cpu)){const c=cpu.color;killEntity(cpu);scheduleReplacementCpu(c);return;}
   checkGotRunInto(cpu);
   if(!cpu.alive){scheduleReplacementCpu(cpu.color);return;}
-  if(cpu.outside)cpu.trail.push({x:cpu.x+7,y:cpu.y+7});
+  if(cpu.outside)cpu.trail.push({x:cpu.x+2,y:cpu.y+2});
 }
 
 function startOnlineMode(){
@@ -228,7 +231,7 @@ function sendMyState(){
 }
 
 function isInOwnTerritory(e){
-  const px=Math.floor(e.x+7),py=Math.floor(e.y+7);
+  const px=Math.floor(e.x+2),py=Math.floor(e.y+2);
   if(px<0||px>=W||py<0||py>=H)return false;
   return e.ctx.getImageData(px,py,1,1).data[3]>0;
 }
@@ -274,46 +277,39 @@ function nearTrailPoint(trail,cx,cy,r,start=0,end=trail.length){
 }
 
 function checkOwnTrailHit(e){
-  return e.trail.length>=20&&nearTrailPoint(e.trail,e.x+7,e.y+7,6,0,e.trail.length-10);
+  return e.trail.length>=20&&nearTrailPoint(e.trail,e.x+2,e.y+2,2,0,e.trail.length-10);
 }
 
 function checkGotRunInto(self){
   if(!self.outside||!self.trail.length)return;
   for(const other of entities){
     if(other===self||!other.alive)continue;
-    if(nearTrailPoint(self.trail,other.x+7,other.y+7,8))
+    if(nearTrailPoint(self.trail,other.x+2,other.y+2,3))
       return killEntity(self,'Your trail was cut!');
   }
 }
 
 // ── FILL ENCLOSED ─────────────────────────────────────────────────────────
 function fillEnclosed(entity){
-  // Draw the trail as a thick stroke onto the territory canvas first,
-  // so it acts as a solid wall connecting the two territory edges.
   if(entity.trail.length>1){
     entity.ctx.beginPath();
     entity.ctx.strokeStyle=entity.color;
-    entity.ctx.lineWidth=15;entity.ctx.lineJoin='miter';entity.ctx.lineCap='square';
+    entity.ctx.lineWidth=4;entity.ctx.lineJoin='miter';entity.ctx.lineCap='square';
     entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
     for(let i=1;i<entity.trail.length;i++)entity.ctx.lineTo(entity.trail[i].x,entity.trail[i].y);
     entity.ctx.stroke();
-    // bridge endpoint to current position to close gap
-    entity.ctx.lineWidth=17;
+    entity.ctx.lineWidth=5;
     entity.ctx.beginPath();
     entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
-    entity.ctx.lineTo(entity.x+7,entity.y+7);
+    entity.ctx.lineTo(entity.x+2,entity.y+2);
     entity.ctx.stroke();
   }
 
-  // ── FIX: use the FULL canvas for flood-fill so existing territory
-  // acts as boundary walls on all sides, not just the trail bounding box ──
   const bx=0,by=0,bw=W,bh=H;
-
   const imageData=entity.ctx.getImageData(bx,by,bw,bh);
   const data=imageData.data;
   const outside=new Uint8Array(bw*bh);
   const stack=[];
-  // seed flood-fill from all four edges of the full canvas
   for(let x=0;x<bw;x++){stack.push(x, bw*(bh-1)+x);}
   for(let y=1;y<bh-1;y++){stack.push(y*bw, y*bw+bw-1);}
 
@@ -337,7 +333,6 @@ function fillEnclosed(entity){
       data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;
     }
   }
-  // flatten all painted pixels to clean color
   for(let i=0;i<bw*bh;i++){
     const pi=i*4;
     if(data[pi+3]>0){
@@ -373,13 +368,13 @@ function drawEntity(e){
   ctx.drawImage(e.canvas,0,0);
   if(e.outside&&e.trail.length>1){
     ctx.beginPath();
-    ctx.strokeStyle=e.color;ctx.lineWidth=15;ctx.lineJoin='miter';ctx.lineCap='square';
+    ctx.strokeStyle=e.color;ctx.lineWidth=4;ctx.lineJoin='miter';ctx.lineCap='square';
     ctx.moveTo(e.trail[0].x,e.trail[0].y);
     for(let i=1;i<e.trail.length;i++)ctx.lineTo(e.trail[i].x,e.trail[i].y);
     ctx.stroke();
   }
-  ctx.fillStyle='black';ctx.fillRect(e.x-2,e.y-2,19,19);
-  ctx.fillStyle=e.color;ctx.fillRect(e.x,e.y,15,15);
+  ctx.fillStyle='black';ctx.fillRect(e.x-1,e.y-1,6,6);
+  ctx.fillStyle=e.color;ctx.fillRect(e.x,e.y,4,4);
 }
 
 function draw(){
@@ -387,7 +382,7 @@ function draw(){
   ctx.save();
   ctx.translate(VIEWW/2,VIEWH/2);
   ctx.scale(ZOOM,ZOOM);
-  ctx.translate(-(player.x+7),-(player.y+7));
+  ctx.translate(-(player.x+2),-(player.y+2));
   ctx.fillStyle='#eee';ctx.fillRect(0,0,W,H);
   entities.forEach(drawEntity);
   ctx.restore();
@@ -400,7 +395,7 @@ function gameLoop(){
   const p=direction?moved(player,direction):player;
   player.x=p.x;player.y=p.y;
 
-  if(frames>30&&(player.x<-5||player.x>W-10||player.y<-5||player.y>H-10))
+  if(frames>30&&(player.x<-2||player.x>W-3||player.y<-2||player.y>H-3))
     return die('You hit a wall!');
 
   if(direction){
@@ -411,7 +406,7 @@ function gameLoop(){
       fillEnclosed(player);
     } else if(player.outside){
       if(checkOwnTrailHit(player))return die('You hit your own trail!');
-      player.trail.push({x:player.x+7,y:player.y+7});
+      player.trail.push({x:player.x+2,y:player.y+2});
     }
   }
 
