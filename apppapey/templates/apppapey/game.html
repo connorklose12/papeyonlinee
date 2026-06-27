@@ -3,16 +3,19 @@
 <head>
 <title>Papey Online</title>
 <style>
-body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden}
-#ui{position:fixed;top:10px;left:50%;transform:translateX(-50%);color:white;font:bold 20px Arial;background:rgba(0,0,0,.5);padding:5px 15px;border-radius:10px;display:none}
-#gameover{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);justify-content:center;align-items:center;flex-direction:column;color:white;font:bold 60px Arial;text-align:center}
-#gameover button{font-size:28px;margin-top:30px;padding:15px 40px;cursor:pointer;border:none;border-radius:10px;background:white;color:black}
-#game{border:1px solid grey;display:none}
-#leaderboard{position:fixed;top:10px;right:10px;color:white;font:14px Arial;background:rgba(0,0,0,.5);padding:10px 14px;border-radius:10px;display:none;min-width:140px}
-#leaderboard div{display:flex;align-items:center;gap:6px;margin:3px 0}
-#leaderboard .swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Courier New',monospace}
+#ui{position:fixed;top:10px;left:50%;transform:translateX(-50%);color:#0f0;font:bold 16px 'Courier New';background:#000;padding:4px 12px;border:2px solid #0f0;display:none;image-rendering:pixelated;letter-spacing:2px}
+#gameover{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);justify-content:center;align-items:center;flex-direction:column;color:#0f0;font:bold 48px 'Courier New';text-align:center;image-rendering:pixelated}
+#gameover button{font-size:20px;margin-top:30px;padding:12px 32px;cursor:pointer;border:3px solid #0f0;border-radius:0;background:#000;color:#0f0;font-family:'Courier New';letter-spacing:2px}
+#gameover button:hover{background:#0f0;color:#000}
+#game{border:4px solid #333;display:none;image-rendering:pixelated;image-rendering:crisp-edges}
+#leaderboard{position:fixed;top:10px;right:10px;color:#0f0;font:12px 'Courier New';background:#000;padding:8px 12px;border:2px solid #333;display:none;min-width:140px;letter-spacing:1px}
+#leaderboard div{display:flex;align-items:center;gap:6px;margin:2px 0}
+#leaderboard .swatch{width:10px;height:10px;flex-shrink:0}
 #modeSelect{display:flex;flex-direction:column;gap:20px;align-items:center}
-#modeSelect button{font:bold 24px Arial;padding:20px 50px;cursor:pointer;border:none;border-radius:10px;background:white;color:black}
+#modeSelect button{font:bold 20px 'Courier New';padding:16px 40px;cursor:pointer;border:3px solid #0f0;border-radius:0;background:#000;color:#0f0;letter-spacing:3px}
+#modeSelect button:hover{background:#0f0;color:#000}
+#scanlines{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);z-index:999}
 </style>
 </head>
 <body>
@@ -21,7 +24,7 @@ body{margin:0;background:#111;display:flex;justify-content:center;align-items:ce
     <button onclick="startGame('online')">Play Online</button>
     <div id="onlineStatus" style="color:#ccc;font:14px Arial;margin-top:6px;text-align:center">checking who's online…</div>
   </div>
-  <button style="padding: 8px;font:8px" onclick="startGame('cpu')">Play vs CPUs</button>
+  <button style="padding: 8px;font:12px Arial " onclick="startGame('cpu')">Play vs CPUs</button>
 </div>
 <div id="ui">0% covered</div>
 <div id="leaderboard"></div>
