@@ -38,7 +38,6 @@ pyOpenSSL==26.3.0
 pysat==3.2.2
 pytest==9.0.3
 python-dateutil==2.9.0.post0
-pywin32==311
 PyYAML==6.0.3
 scipy==1.17.1
 service-identity==26.1.0
