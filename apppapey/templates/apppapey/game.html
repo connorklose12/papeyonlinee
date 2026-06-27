@@ -39,11 +39,9 @@ const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
 const ui=document.getElementById('ui'),leaderboardEl=document.getElementById('leaderboard');
 const gameoverEl=document.getElementById('gameover'),deathMsg=document.getElementById('deathMsg'),gameoverTitle=document.getElementById('gameoverTitle');
 
-// ── LOW-RES: world is 1000×1000 instead of 4000×4000 (16× fewer pixels) ──
 const W=1000,H=1000,VIEWW=750,VIEWH=500,ZOOM=4.1;
 const COLORS=['blue','red','green','orange','purple','cyan','deeppink','gold','lime','coral'];
 const opposite={left:'right',right:'left',up:'down',down:'up'};
-// Speed scaled down proportionally (was 3 on 4000px world → ~0.75 on 1000px)
 const speed=0.75;
 let mode=null,direction=null,alive=true,frames=0,ws=null,myId=null;
 
@@ -74,7 +72,6 @@ function nextFreeColor(){
   }catch(e){}
 })();
 
-// Spawn box scaled from 20px on 4000px → 5px on 1000px
 function makeEntity(x,y,color){
   const c=document.createElement('canvas');
   c.width=W;c.height=H;
@@ -206,23 +203,38 @@ function startOnlineMode(){
   ws=new WebSocket(`ws://${location.host}/ws/game/`);
   ws.onmessage=event=>{
     const data=JSON.parse(event.data);
-    if(data.myId){myId=data.myId;return;}
+
+    // Handle the initial handshake message (has myId + totalOnline)
+    if(data.myId){
+      myId=data.myId;
+      // Don't return — fall through in case players are also included,
+      // but typically this message has no player states so the loop below is a no-op.
+    }
+
+    // Process player states (any key that is a numeric player id)
     for(const id in data){
-      if(id===myId)continue;
+      if(id==='myId'||id==='room'||id==='totalOnline')continue;
+      if(id===myId)continue; // skip ourselves
+      const state=data[id];
       if(!remotePlayers[id]){
         const color=nextFreeColor();
-        const rp=makeEntity(data[id].x,data[id].y,color);
+        const rp=makeEntity(state.x,state.y,color);
         remotePlayers[id]=rp;
         entities.push(rp);
       }
-      Object.assign(remotePlayers[id],{x:data[id].x,y:data[id].y,
-        trail:data[id].trail,outside:data[id].trail.length>0});
+      Object.assign(remotePlayers[id],{x:state.x,y:state.y,
+        trail:state.trail,outside:state.trail.length>0});
     }
-    for(const id in remotePlayers){
-      if(!(id in data)){
-        releaseColor(remotePlayers[id].color);
-        entities.splice(entities.indexOf(remotePlayers[id]),1);
-        delete remotePlayers[id];
+
+    // Remove players no longer in the broadcast
+    // Only prune when we have a real game-state message (not the handshake)
+    if(!('myId' in data)){
+      for(const id in remotePlayers){
+        if(!(id in data)){
+          releaseColor(remotePlayers[id].color);
+          entities.splice(entities.indexOf(remotePlayers[id]),1);
+          delete remotePlayers[id];
+        }
       }
     }
   };
@@ -292,7 +304,6 @@ function checkGotRunInto(self){
   }
 }
 
-// ── FILL ENCLOSED ─────────────────────────────────────────────────────────
 function fillEnclosed(entity){
   if(entity.trail.length>1){
     entity.ctx.beginPath();
@@ -365,7 +376,6 @@ function fillEnclosed(entity){
   }
 }
 
-// ── DRAW ─────────────────────────────────────────────────────────────────
 function drawEntity(e){
   if(!e.alive)return;
   ctx.drawImage(e.canvas,0,0);
@@ -391,7 +401,6 @@ function draw(){
   ctx.restore();
 }
 
-// ── GAME LOOP ─────────────────────────────────────────────────────────────
 function gameLoop(){
   if(!alive){requestAnimationFrame(gameLoop);return;}
   frames++;
