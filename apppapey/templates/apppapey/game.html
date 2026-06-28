@@ -376,8 +376,15 @@ function fillEnclosed(entity){
   }
 }
 
+function syncRemoteCanvas(e){
+  e.ctx.clearRect(0,0,W,H);
+  e.ctx.fillStyle=e.color;e.ctx.globalAlpha=0.4;e.ctx.fillRect(e.x-5,e.y-5,10,10);
+  e.ctx.globalAlpha=1;e.ctx.strokeStyle=e.color;e.ctx.lineWidth=1;e.ctx.strokeRect(e.x-5,e.y-5,10,10);
+}
+
 function drawEntity(e){
   if(!e.alive)return;
+  if(mode==='online'&&e!==player)syncRemoteCanvas(e);
   ctx.drawImage(e.canvas,0,0);
   if(e.outside&&e.trail.length>1){
     ctx.beginPath();
