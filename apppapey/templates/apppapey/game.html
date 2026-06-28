@@ -196,8 +196,29 @@ function startOnlineMode(){
     if(data.myId){
       myId=data.myId;
       if(data.existing){
-        for(const id in data.existing){
-          createOrUpdateRemote(id,data.existing[id],true);
+        const existingIds=Object.keys(data.existing);
+        if(existingIds.length===0){
+          // No existing players — move player to a random free spot now
+          const s=findFreeSpawnSpot();
+          if(s) movePlayerTo(s.x,s.y);
+        } else {
+          // Load all territory PNGs, then pick a free spawn once they're all drawn
+          let pending=existingIds.length;
+          for(const id of existingIds){
+            const state=data.existing[id];
+            createOrUpdateRemote(id,state,false);
+            if(state.territoryPng){
+              const img=new Image();
+              img.onload=img.onerror=()=>{
+                remotePlayers[id].ctx.clearRect(0,0,W,H);
+                if(img.complete&&img.naturalWidth)remotePlayers[id].ctx.drawImage(img,0,0);
+                if(--pending===0){const s=findFreeSpawnSpot();if(s)movePlayerTo(s.x,s.y);}
+              };
+              img.src=state.territoryPng;
+            } else {
+              if(--pending===0){const s=findFreeSpawnSpot();if(s)movePlayerTo(s.x,s.y);}
+            }
+          }
         }
       }
       return;
@@ -247,10 +268,17 @@ function startOnlineMode(){
   ws.onerror=e=>console.error('WS error',e);
 }
 
+// Teleport the local player to a new spawn position and repaint their home square
+function movePlayerTo(x,y){
+  player.ctx.clearRect(0,0,W,H);
+  player.x=x; player.y=y; player.homeX=x; player.homeY=y;
+  player.ctx.fillStyle=player.color;player.ctx.globalAlpha=0.4;player.ctx.fillRect(x-5,y-5,10,10);
+  player.ctx.globalAlpha=1;player.ctx.strokeStyle=player.color;player.ctx.lineWidth=1;player.ctx.strokeRect(x-5,y-5,10,10);
+}
+
 function createOrUpdateRemote(id,state,applyTerritory){
   if(!remotePlayers[id]){
     const color=nextFreeColor();
-    // Spawn remote player at a random corner/edge so they don't overlap us
     const spawnX=state.x||Math.random()*W;
     const spawnY=state.y||Math.random()*H;
     const rp=makeEntity(spawnX,spawnY,color);
