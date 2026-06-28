@@ -4,16 +4,16 @@
 <title>Papey Online</title>
 <style>
 body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Courier New',monospace}
-#ui{position:fixed;top:10px;left:50%;transform:translateX(-50%);color:#0f0;font:bold 16px 'Courier New';background:#000;padding:4px 12px;border:2px solid #0f0;display:none;image-rendering:pixelated;letter-spacing:2px}
+#ui{position:fixed;top:10px;left:50%;transform:translateX(-50%);color:#0f0;font:bold 16px 'Courier New';background:#000;padding:4px 12px;border:2px solid #0f0;display:none;letter-spacing:2px}
 #gameover{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);justify-content:center;align-items:center;flex-direction:column;color:#0f0;font:bold 48px 'Courier New';text-align:center}
-#gameover button{font-size:20px;margin-top:30px;padding:12px 32px;cursor:pointer;border:3px solid #0f0;border-radius:0;background:#000;color:#0f0;font-family:'Courier New';letter-spacing:2px}
+#gameover button{font-size:20px;margin-top:30px;padding:12px 32px;cursor:pointer;border:3px solid #0f0;background:#000;color:#0f0;font-family:'Courier New';letter-spacing:2px}
 #gameover button:hover{background:#0f0;color:#000}
 #game{border:4px solid #333;display:none;image-rendering:pixelated;image-rendering:crisp-edges}
 #leaderboard{position:fixed;top:10px;right:10px;color:#0f0;font:12px 'Courier New';background:#000;padding:8px 12px;border:2px solid #333;display:none;min-width:140px;letter-spacing:1px}
 #leaderboard div{display:flex;align-items:center;gap:6px;margin:2px 0}
 #leaderboard .swatch{width:10px;height:10px;flex-shrink:0}
 #modeSelect{display:flex;flex-direction:column;gap:20px;align-items:center}
-#modeSelect button{font:bold 20px 'Courier New';padding:16px 40px;cursor:pointer;border:3px solid #0f0;border-radius:0;background:#000;color:#0f0;letter-spacing:3px}
+#modeSelect button{font:bold 20px 'Courier New';padding:16px 40px;cursor:pointer;border:3px solid #0f0;background:#000;color:#0f0;letter-spacing:3px}
 #modeSelect button:hover{background:#0f0;color:#000}
 </style>
 </head>
@@ -45,12 +45,11 @@ const speed=0.75;
 let mode=null,direction=null,alive=true,frames=0,ws=null,myId=null;
 
 const usedColorSet=new Set();
-function claimColor(color){usedColorSet.add(color);return color;}
-function releaseColor(color){usedColorSet.delete(color);}
+function claimColor(c){usedColorSet.add(c);return c;}
+function releaseColor(c){usedColorSet.delete(c);}
 function nextFreeColor(){
   for(const c of COLORS)if(!usedColorSet.has(c))return claimColor(c);
-  const h=Math.floor(Math.random()*360);
-  const c=`hsl(${h},100%,50%)`;
+  const c=`hsl(${Math.floor(Math.random()*360)},100%,50%)`;
   usedColorSet.add(c);return c;
 }
 
@@ -71,21 +70,25 @@ function nextFreeColor(){
   }catch(e){}
 })();
 
+// ── ENTITY ───────────────────────────────────────────────────────────────────
+
 function makeEntity(x,y,color){
   const c=document.createElement('canvas');
   c.width=W;c.height=H;
   const cx=c.getContext('2d');
+  // Draw initial home territory (small square)
   cx.fillStyle=color;cx.globalAlpha=0.4;cx.fillRect(x-5,y-5,10,10);
   cx.globalAlpha=1;cx.strokeStyle=color;cx.lineWidth=1;cx.strokeRect(x-5,y-5,10,10);
   return{x,y,color,trail:[],alive:true,outside:false,
-         canvas:c,ctx:cx,homeX:x,homeY:y,filledPixels:100,
-         dir:null,timer:0};
+         canvas:c,ctx:cx,homeX:x,homeY:y,filledPixels:100,dir:null,timer:0};
 }
 
 claimColor(COLORS[0]);
 const player=makeEntity(W/2,H/2,COLORS[0]);
 const entities=[player];
 const remotePlayers={};
+
+// ── CPU LOGIC ────────────────────────────────────────────────────────────────
 
 const CPU_COUNT=9;
 
@@ -98,7 +101,6 @@ function spotIsFree(x,y){
   }
   return true;
 }
-
 function findFreeSpawnSpot(){
   for(let i=0;i<60;i++){
     const x=15+Math.random()*(W-30),y=15+Math.random()*(H-30);
@@ -106,15 +108,10 @@ function findFreeSpawnSpot(){
   }
   return null;
 }
-
 function startCpuMode(){
   entities.push(makeEntity(player.x+30,player.y-30,nextFreeColor()));
-  for(let i=1;i<CPU_COUNT;i++){
-    const s=findFreeSpawnSpot();
-    if(s)entities.push(makeEntity(s.x,s.y,nextFreeColor()));
-  }
+  for(let i=1;i<CPU_COUNT;i++){const s=findFreeSpawnSpot();if(s)entities.push(makeEntity(s.x,s.y,nextFreeColor()));}
 }
-
 function scheduleReplacementCpu(deadColor){
   releaseColor(deadColor);
   setTimeout(()=>{
@@ -123,14 +120,9 @@ function scheduleReplacementCpu(deadColor){
     if(s){const color=nextFreeColor();entities.push(makeEntity(s.x,s.y,color));}
   },1500);
 }
-
 function moved(e,d){
-  return{
-    x:e.x-(d==='left')*speed+(d==='right')*speed,
-    y:e.y-(d==='up')*speed+(d==='down')*speed
-  };
+  return{x:e.x-(d==='left')*speed+(d==='right')*speed,y:e.y-(d==='up')*speed+(d==='down')*speed};
 }
-
 function scoreCpuDir(cpu,d){
   const p=moved(cpu,d);
   if(p.x<3||p.x>W-7||p.y<3||p.y>H-7)return-Infinity;
@@ -145,28 +137,21 @@ function scoreCpuDir(cpu,d){
   else{score+=(curDist-distHome)*3;if(d===cpu.dir)score+=1;if(trailLen>60)score+=(trailLen-60)*0.8;}
   return score;
 }
-
 function chooseCpuDir(cpu){
   let best=null,bestScore=-Infinity;
   for(const d of['left','right','up','down']){const s=scoreCpuDir(cpu,d);if(s>bestScore){bestScore=s;best=d;}}
   return best;
 }
-
 function updateCpu(cpu){
   if(!cpu.alive)return;
   cpu.timer=(cpu.timer||0)+1;
   const currentBlocked=!cpu.dir||scoreCpuDir(cpu,cpu.dir)===-Infinity;
-  const timeToRethink=cpu.timer>8+Math.random()*7;
-  const nearWall=cpu.x<8||cpu.x>W-12||cpu.y<8||cpu.y>H-12;
-  const trailTooLong=cpu.outside&&cpu.trail.length>35;
-  if(currentBlocked||timeToRethink||nearWall||trailTooLong){
-    const best=chooseCpuDir(cpu);
-    if(best!==null){cpu.dir=best;cpu.timer=0;}
+  if(currentBlocked||cpu.timer>8+Math.random()*7||cpu.x<8||cpu.x>W-12||cpu.y<8||cpu.y>H-12||(cpu.outside&&cpu.trail.length>35)){
+    const best=chooseCpuDir(cpu);if(best!==null){cpu.dir=best;cpu.timer=0;}
   }
-  if(scoreCpuDir(cpu,cpu.dir)===-Infinity){const fallback=chooseCpuDir(cpu);if(fallback)cpu.dir=fallback;}
+  if(scoreCpuDir(cpu,cpu.dir)===-Infinity){const f=chooseCpuDir(cpu);if(f)cpu.dir=f;}
   const p=moved(cpu,cpu.dir||'right');
-  cpu.x=Math.max(0,Math.min(W-4,p.x));
-  cpu.y=Math.max(0,Math.min(H-4,p.y));
+  cpu.x=Math.max(0,Math.min(W-4,p.x));cpu.y=Math.max(0,Math.min(H-4,p.y));
   if(!isInOwnTerritory(cpu))cpu.outside=true;
   if(cpu.outside&&isInOwnTerritory(cpu)){fillEnclosed(cpu);return;}
   if(cpu.outside&&checkOwnTrailHit(cpu)){const c=cpu.color;killEntity(cpu);scheduleReplacementCpu(c);return;}
@@ -175,29 +160,47 @@ function updateCpu(cpu){
   if(cpu.outside)cpu.trail.push({x:cpu.x+2,y:cpu.y+2});
 }
 
-// ── ONLINE MODE ──────────────────────────────────────────────────────────────
+// ── ONLINE MODE ───────────────────────────────────────────────────────────────
+
+function getOrCreateRemote(id,x,y){
+  if(!remotePlayers[id]){
+    const color=nextFreeColor();
+    const rp=makeEntity(x||500,y||500,color);
+    remotePlayers[id]=rp;
+    entities.push(rp);
+  }
+  return remotePlayers[id];
+}
 
 function startOnlineMode(){
   try{
     const proto=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(`${proto}://${location.host}/ws/game/`);
-
     ws.onmessage=event=>{
       const data=JSON.parse(event.data);
 
-      // First message: our ID + existing players with their full territory
+      // ── Handshake: our ID + existing players with fill history ──
       if(data.myId){
         myId=data.myId;
         if(data.existing){
           for(const id in data.existing){
             const state=data.existing[id];
-            createOrUpdateRemote(id,state,true); // true = apply territory PNG
+            const rp=getOrCreateRemote(id,state.x,state.y);
+            rp.x=state.x;rp.y=state.y;
+            rp.trail=state.trail||[];
+            rp.outside=rp.trail.length>0;
+            // Replay all past fills so their territory appears correctly
+            if(state.fills){
+              for(const fill of state.fills){
+                applyRemoteFill(rp,fill.trail,fill.x,fill.y);
+              }
+            }
           }
         }
         return;
       }
 
-      // Player left
+      // ── Player left ──
       if(data.__left__){
         const id=data.__left__;
         if(remotePlayers[id]){
@@ -208,62 +211,123 @@ function startOnlineMode(){
         return;
       }
 
-      // Regular broadcast: position + trail for all players in room
-      for(const id in data){
-        if(id===myId||id==='__left__')continue;
-        createOrUpdateRemote(id,data[id],false);
+      // ── Fill event: replay the fill on the remote player's canvas ──
+      if(data.__fill__){
+        const {id,trail,x,y}=data.__fill__;
+        if(id===myId)return; // we already did this locally
+        const rp=remotePlayers[id];
+        if(rp)applyRemoteFill(rp,trail,x,y);
+        return;
       }
 
-      // Remove players who disappeared from the broadcast
-      for(const id in remotePlayers){
-        if(!(id in data)){
-          releaseColor(remotePlayers[id].color);
-          entities.splice(entities.indexOf(remotePlayers[id]),1);
-          delete remotePlayers[id];
+      // ── Position broadcast ──
+      if(data.__positions__){
+        const positions=data.__positions__;
+        for(const id in positions){
+          if(id===myId)continue;
+          const state=positions[id];
+          const rp=getOrCreateRemote(id,state.x,state.y);
+          rp.x=state.x;rp.y=state.y;
+          rp.trail=state.trail||[];
+          rp.outside=rp.trail.length>0;
+        }
+        // Remove departed players
+        for(const id in remotePlayers){
+          if(!(id in positions)){
+            releaseColor(remotePlayers[id].color);
+            entities.splice(entities.indexOf(remotePlayers[id]),1);
+            delete remotePlayers[id];
+          }
         }
       }
     };
   }catch(e){console.error('WebSocket failed:',e);}
 }
 
-function createOrUpdateRemote(id,state,applyTerritory){
-  if(!remotePlayers[id]){
-    const color=nextFreeColor();
-    const rp=makeEntity(state.x||500,state.y||500,color);
-    remotePlayers[id]=rp;
-    entities.push(rp);
-  }
-  const rp=remotePlayers[id];
-  rp.x=state.x;
-  rp.y=state.y;
-  rp.trail=state.trail||[];
-  rp.outside=rp.trail.length>0;
-  rp.filledPixels=state.filledPixels||100;
+// Run the flood-fill algorithm on a remote player's off-screen canvas,
+// using their saved trail and final position. This mirrors fillEnclosed()
+// but without any side effects on our own player or leaderboard.
+function applyRemoteFill(rp,trail,finalX,finalY){
+  if(!rp||!rp.alive)return;
 
-  // Apply persisted territory from a PNG snapshot (on join or after a fill)
-  if(applyTerritory&&state.territoryPng){
-    const img=new Image();
-    img.onload=()=>{
-      rp.ctx.clearRect(0,0,W,H);
-      rp.ctx.drawImage(img,0,0);
-    };
-    img.src=state.territoryPng;
+  // Stroke the trail onto their canvas
+  if(trail.length>1){
+    rp.ctx.beginPath();
+    rp.ctx.strokeStyle=rp.color;rp.ctx.lineWidth=4;
+    rp.ctx.lineJoin='miter';rp.ctx.lineCap='square';
+    rp.ctx.moveTo(trail[0].x,trail[0].y);
+    for(let i=1;i<trail.length;i++)rp.ctx.lineTo(trail[i].x,trail[i].y);
+    rp.ctx.stroke();
+    rp.ctx.lineWidth=5;
+    rp.ctx.beginPath();
+    rp.ctx.moveTo(trail[0].x,trail[0].y);
+    rp.ctx.lineTo(finalX+2,finalY+2);
+    rp.ctx.stroke();
   }
+
+  // Flood-fill enclosed area
+  const bw=W,bh=H;
+  const imageData=rp.ctx.getImageData(0,0,bw,bh);
+  const data=imageData.data;
+  const outside=new Uint8Array(bw*bh);
+  const stack=[];
+  for(let x=0;x<bw;x++){stack.push(x,bw*(bh-1)+x);}
+  for(let y=1;y<bh-1;y++){stack.push(y*bw,y*bw+bw-1);}
+
+  const tmp=document.createElement('canvas');tmp.width=tmp.height=1;
+  const tc=tmp.getContext('2d');
+  tc.fillStyle=rp.color;tc.fillRect(0,0,1,1);
+  const[cr,cg,cb]=tc.getImageData(0,0,1,1).data;
+
+  while(stack.length){
+    const idx=stack.pop();
+    if(idx<0||idx>=bw*bh||outside[idx]||data[idx*4+3]>0)continue;
+    outside[idx]=1;
+    stack.push(idx+1,idx-1,idx+bw,idx-bw);
+  }
+
+  let newlyFilled=0;
+  for(let i=0;i<bw*bh;i++){
+    if(!outside[i]){
+      const pi=i*4;
+      if(data[pi+3]===0)newlyFilled++;
+      data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;
+    }
+  }
+  for(let i=0;i<bw*bh;i++){
+    const pi=i*4;
+    if(data[pi+3]>0){data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;}
+  }
+  rp.ctx.putImageData(imageData,0,0);
+  rp.filledPixels=(rp.filledPixels||0)+newlyFilled;
+
+  // Erase other players' territory that this fill overlaps
+  for(const other of entities){
+    if(other===rp||!other.alive)continue;
+    const oi=other.ctx.getImageData(0,0,bw,bh);
+    const od=oi.data;
+    let erased=0;
+    for(let i=0;i<od.length;i+=4){
+      if(data[i+3]>0&&od[i+3]>0){od[i+3]=0;erased++;}
+    }
+    other.ctx.putImageData(oi,0,0);
+    if(erased)other.filledPixels=Math.max(0,(other.filledPixels||0)-erased);
+  }
+
+  rp.trail=[];rp.outside=false;
 }
 
-// Capture our territory canvas as a PNG data URL to send to server after fill
-function captureMyTerritory(){
-  return player.canvas.toDataURL('image/png');
-}
-
-function sendMyState(includePng){
+function sendMyState(){
   if(!ws||ws.readyState!==WebSocket.OPEN)return;
-  const payload={x:player.x,y:player.y,trail:player.trail,filledPixels:player.filledPixels};
-  if(includePng)payload.territoryPng=captureMyTerritory();
-  ws.send(JSON.stringify(payload));
+  ws.send(JSON.stringify({x:player.x,y:player.y,trail:player.trail}));
 }
 
-// ── SHARED GAME LOGIC ────────────────────────────────────────────────────────
+function sendFillEvent(trail,x,y){
+  if(!ws||ws.readyState!==WebSocket.OPEN)return;
+  ws.send(JSON.stringify({type:'fill',trail,x,y}));
+}
+
+// ── SHARED GAME LOGIC ─────────────────────────────────────────────────────────
 
 function isInOwnTerritory(e){
   const px=Math.floor(e.x+2),py=Math.floor(e.y+2);
@@ -310,11 +374,9 @@ function nearTrailPoint(trail,cx,cy,r,start=0,end=trail.length){
     if(Math.abs(trail[i].x-cx)<r&&Math.abs(trail[i].y-cy)<r)return true;
   return false;
 }
-
 function checkOwnTrailHit(e){
   return e.trail.length>=20&&nearTrailPoint(e.trail,e.x+2,e.y+2,2,0,e.trail.length-10);
 }
-
 function checkGotRunInto(self){
   if(!self.outside||!self.trail.length)return;
   for(const other of entities){
@@ -325,37 +387,44 @@ function checkGotRunInto(self){
 }
 
 function fillEnclosed(entity){
-  if(entity.trail.length>1){
+  // Capture trail before clearing it
+  const trailSnapshot=entity.trail.slice();
+  const finalX=entity.x,finalY=entity.y;
+
+  if(trailSnapshot.length>1){
     entity.ctx.beginPath();
     entity.ctx.strokeStyle=entity.color;entity.ctx.lineWidth=4;
     entity.ctx.lineJoin='miter';entity.ctx.lineCap='square';
-    entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
-    for(let i=1;i<entity.trail.length;i++)entity.ctx.lineTo(entity.trail[i].x,entity.trail[i].y);
+    entity.ctx.moveTo(trailSnapshot[0].x,trailSnapshot[0].y);
+    for(let i=1;i<trailSnapshot.length;i++)entity.ctx.lineTo(trailSnapshot[i].x,trailSnapshot[i].y);
     entity.ctx.stroke();
     entity.ctx.lineWidth=5;
     entity.ctx.beginPath();
-    entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
-    entity.ctx.lineTo(entity.x+2,entity.y+2);
+    entity.ctx.moveTo(trailSnapshot[0].x,trailSnapshot[0].y);
+    entity.ctx.lineTo(finalX+2,finalY+2);
     entity.ctx.stroke();
   }
 
-  const bx=0,by=0,bw=W,bh=H;
-  const imageData=entity.ctx.getImageData(bx,by,bw,bh);
+  const bw=W,bh=H;
+  const imageData=entity.ctx.getImageData(0,0,bw,bh);
   const data=imageData.data;
   const outside=new Uint8Array(bw*bh);
   const stack=[];
   for(let x=0;x<bw;x++){stack.push(x,bw*(bh-1)+x);}
   for(let y=1;y<bh-1;y++){stack.push(y*bw,y*bw+bw-1);}
+
   const tmp=document.createElement('canvas');tmp.width=tmp.height=1;
   const tc=tmp.getContext('2d');
   tc.fillStyle=entity.color;tc.fillRect(0,0,1,1);
   const[cr,cg,cb]=tc.getImageData(0,0,1,1).data;
+
   while(stack.length){
     const idx=stack.pop();
     if(idx<0||idx>=bw*bh||outside[idx]||data[idx*4+3]>0)continue;
     outside[idx]=1;
     stack.push(idx+1,idx-1,idx+bw,idx-bw);
   }
+
   let newlyFilled=0;
   for(let i=0;i<bw*bh;i++){
     if(!outside[i]){
@@ -368,18 +437,18 @@ function fillEnclosed(entity){
     const pi=i*4;
     if(data[pi+3]>0){data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;}
   }
-  entity.ctx.putImageData(imageData,bx,by);
+  entity.ctx.putImageData(imageData,0,0);
   entity.filledPixels=(entity.filledPixels||0)+newlyFilled;
 
   for(const other of entities){
     if(other===entity||!other.alive)continue;
-    const oi=other.ctx.getImageData(bx,by,bw,bh);
+    const oi=other.ctx.getImageData(0,0,bw,bh);
     const od=oi.data;
     let erased=0;
     for(let i=0;i<od.length;i+=4){
       if(data[i+3]>0&&od[i+3]>0){od[i+3]=0;erased++;}
     }
-    other.ctx.putImageData(oi,bx,by);
+    other.ctx.putImageData(oi,0,0);
     if(erased)other.filledPixels=Math.max(0,(other.filledPixels||0)-erased);
   }
 
@@ -389,23 +458,18 @@ function fillEnclosed(entity){
     const pct=getPercent(player);
     ui.textContent=pct+'% covered';
     if(pct>=100)win();
-    // Send territory PNG to server so other players can see our fills
-    if(mode==='online')sendMyState(true);
+    // Tell all other clients to replay this fill
+    if(mode==='online')sendFillEvent(trailSnapshot,finalX,finalY);
   }
 }
 
-// ── RENDERING ────────────────────────────────────────────────────────────────
+// ── RENDERING ─────────────────────────────────────────────────────────────────
 
-// For remote players: draw their territory canvas directly (it's kept current
-// by createOrUpdateRemote applying the territoryPng snapshot), then overlay
-// their live trail on top.
 function drawEntity(e){
   if(!e.alive)return;
-
-  // Draw territory (their off-screen canvas, which holds filled zones)
+  // Territory is already painted on e.canvas by fillEnclosed / applyRemoteFill
   ctx.drawImage(e.canvas,0,0);
-
-  // Draw live trail stroked on the main canvas (not stored in their canvas)
+  // Live trail
   if(e.outside&&e.trail.length>1){
     ctx.beginPath();
     ctx.strokeStyle=e.color;ctx.lineWidth=4;ctx.lineJoin='miter';ctx.lineCap='square';
@@ -413,8 +477,7 @@ function drawEntity(e){
     for(let i=1;i<e.trail.length;i++)ctx.lineTo(e.trail[i].x,e.trail[i].y);
     ctx.stroke();
   }
-
-  // Draw player dot
+  // Dot
   ctx.fillStyle='black';ctx.fillRect(e.x-1,e.y-1,6,6);
   ctx.fillStyle=e.color;ctx.fillRect(e.x,e.y,4,4);
 }
@@ -429,6 +492,8 @@ function draw(){
   entities.forEach(drawEntity);
   ctx.restore();
 }
+
+// ── GAME LOOP ─────────────────────────────────────────────────────────────────
 
 function gameLoop(){
   if(!alive){requestAnimationFrame(gameLoop);return;}
@@ -452,7 +517,7 @@ function gameLoop(){
   }
 
   if(mode==='cpu')entities.slice(1).forEach(updateCpu);
-  else sendMyState(false); // send position + trail every frame; PNG only after fills
+  else sendMyState();
 
   draw();
   updateLeaderboard();
