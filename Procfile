@@ -1,1 +1,1 @@
-web: gunicorn papeyonlinee.wsgi
+web: daphne papeyonlinee.asgi:application --port $PORT --bind 0.0.0.0

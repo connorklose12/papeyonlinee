@@ -51,3 +51,4 @@ tzdata==2026.2
 ujson==5.13.0
 xarray==2026.4.0
 zope.interface==8.5
+whitenoise
