@@ -54,20 +54,24 @@ function nextFreeColor(){
   usedColorSet.add(c);return c;
 }
 
+// ── Lobby online status peek ──────────────────────────────────────────────────
 (function checkOnlineStatus(){
   try{
     const proto=location.protocol==='https:'?'wss':'ws';
     const peek=new WebSocket(`${proto}://${location.host}/ws/game/`);
+    let done=false;
     peek.onmessage=e=>{
+      if(done)return;
       const d=JSON.parse(e.data);
       if('totalOnline' in d){
-        const n=d.totalOnline-1;
+        done=true;
+        const n=Math.max(0,d.totalOnline-1);
         document.getElementById('onlineStatus').textContent=
-          n>0?`${n} player${n===1?'':'s'} online`:'nobody online right now — you can still play solo';
+          n>0?`${n} player${n===1?'':'s'} online`:'nobody online right now — join and wait!';
         peek.close();
       }
     };
-    peek.onerror=()=>document.getElementById('onlineStatus').textContent='';
+    peek.onerror=()=>document.getElementById('onlineStatus').textContent='server offline';
   }catch(e){}
 })();
 
@@ -175,73 +179,94 @@ function updateCpu(cpu){
   if(cpu.outside)cpu.trail.push({x:cpu.x+2,y:cpu.y+2});
 }
 
-// ── ONLINE MODE ──────────────────────────────────────────────────────────────
+// ── ONLINE MODE ───────────────────────────────────────────────────────────────
 
 function startOnlineMode(){
-  try{
-    const proto=location.protocol==='https:'?'wss':'ws';
-    ws=new WebSocket(`${proto}://${location.host}/ws/game/`);
+  const proto=location.protocol==='https:'?'wss':'ws';
+  ws=new WebSocket(`${proto}://${location.host}/ws/game/`);
 
-    ws.onmessage=event=>{
-      const data=JSON.parse(event.data);
+  ws.onopen=()=>{
+    console.log('Connected to game server');
+  };
 
-      if(data.myId){
-        myId=data.myId;
-        if(data.existing){
-          for(const id in data.existing){
-            const state=data.existing[id];
-            createOrUpdateRemote(id,state,true);
-          }
-        }
-        return;
-      }
+  ws.onmessage=event=>{
+    const data=JSON.parse(event.data);
 
-      if(data.__left__){
-        const id=data.__left__;
-        if(remotePlayers[id]){
-          releaseColor(remotePlayers[id].color);
-          entities.splice(entities.indexOf(remotePlayers[id]),1);
-          delete remotePlayers[id];
-        }
-        return;
-      }
-
-      for(const id in data){
-        if(id===myId||id==='__left__')continue;
-        createOrUpdateRemote(id,data[id],false);
-      }
-
-      for(const id in remotePlayers){
-        if(!(id in data)){
-          releaseColor(remotePlayers[id].color);
-          entities.splice(entities.indexOf(remotePlayers[id]),1);
-          delete remotePlayers[id];
+    // ── identity + existing players ──
+    if(data.myId){
+      myId=data.myId;
+      if(data.existing){
+        for(const id in data.existing){
+          createOrUpdateRemote(id,data.existing[id],true);
         }
       }
-    };
-  }catch(e){console.error('WebSocket failed:',e);}
+      return;
+    }
+
+    // ── online-count update (also sent after connect) ──
+    if('totalOnline' in data) return;
+
+    // ── territory PNG pushed after another player fills ──
+    if(data.__territory__){
+      const rp=remotePlayers[data.__territory__];
+      if(rp&&data.territoryPng){
+        const img=new Image();
+        img.onload=()=>{ rp.ctx.clearRect(0,0,W,H); rp.ctx.drawImage(img,0,0); };
+        img.src=data.territoryPng;
+      }
+      return;
+    }
+
+    // ── player left ──
+    if(data.__left__){
+      const id=data.__left__;
+      if(remotePlayers[id]){
+        releaseColor(remotePlayers[id].color);
+        entities.splice(entities.indexOf(remotePlayers[id]),1);
+        delete remotePlayers[id];
+      }
+      return;
+    }
+
+    // ── regular position broadcast ──
+    for(const id in data){
+      if(id===myId)continue;
+      createOrUpdateRemote(id,data[id],false);
+    }
+    // remove players absent from this broadcast
+    for(const id in remotePlayers){
+      if(!(id in data)){
+        releaseColor(remotePlayers[id].color);
+        entities.splice(entities.indexOf(remotePlayers[id]),1);
+        delete remotePlayers[id];
+      }
+    }
+  };
+
+  ws.onclose=()=>{ if(alive) die('Disconnected from server'); };
+  ws.onerror=e=>console.error('WS error',e);
 }
 
 function createOrUpdateRemote(id,state,applyTerritory){
   if(!remotePlayers[id]){
     const color=nextFreeColor();
-    const rp=makeEntity(state.x||500,state.y||500,color);
+    // Spawn remote player at a random corner/edge so they don't overlap us
+    const spawnX=state.x||Math.random()*W;
+    const spawnY=state.y||Math.random()*H;
+    const rp=makeEntity(spawnX,spawnY,color);
     remotePlayers[id]=rp;
     entities.push(rp);
   }
   const rp=remotePlayers[id];
-  rp.x=state.x;
-  rp.y=state.y;
+  rp.x=state.x??rp.x;
+  rp.y=state.y??rp.y;
   rp.trail=state.trail||[];
   rp.outside=rp.trail.length>0;
-  rp.filledPixels=state.filledPixels||100;
+  rp.filledPixels=state.filledPixels??rp.filledPixels;
 
   if(applyTerritory&&state.territoryPng){
     const img=new Image();
-    img.onload=()=>{
-      rp.ctx.clearRect(0,0,W,H);
-      rp.ctx.drawImage(img,0,0);
-    };
+    img.onload=()=>{ rp.ctx.clearRect(0,0,W,H); rp.ctx.drawImage(img,0,0); };
     img.src=state.territoryPng;
   }
 }
@@ -254,10 +279,10 @@ function sendMyState(includePng){
   if(!ws||ws.readyState!==WebSocket.OPEN)return;
   const payload={x:player.x,y:player.y,trail:player.trail,filledPixels:player.filledPixels};
   if(includePng)payload.territoryPng=captureMyTerritory();
-  ws.send(JSON.stringify(payload));
+  try{ ws.send(JSON.stringify(payload)); }catch(e){}
 }
 
-// ── SHARED GAME LOGIC ────────────────────────────────────────────────────────
+// ── SHARED GAME LOGIC ─────────────────────────────────────────────────────────
 
 function isInOwnTerritory(e){
   const px=Math.floor(e.x+2),py=Math.floor(e.y+2);
@@ -291,7 +316,7 @@ function updateLeaderboard(){
     .map(e=>({color:e.color,pct:parseFloat(getPercent(e)),isPlayer:e===player}))
     .sort((a,b)=>b.pct-a.pct);
   leaderboardEl.innerHTML=ranked.map((r,i)=>
-    `<div><span class="swatch" style="background:${r.color}"></span>#${i+1} ${r.isPlayer?'You':r.color} — ${r.pct}%</div>`).join('');
+    `<div><span class="swatch" style="background:${r.color}"></span>#${i+1} ${r.isPlayer?'<b>You</b>':r.color} — ${r.pct}%</div>`).join('');
 }
 
 function killEntity(victim,reason){
@@ -387,7 +412,7 @@ function fillEnclosed(entity){
   }
 }
 
-// ── RENDERING ────────────────────────────────────────────────────────────────
+// ── RENDERING ─────────────────────────────────────────────────────────────────
 
 function drawEntity(e){
   if(!e.alive)return;
@@ -443,13 +468,14 @@ function gameLoop(){
   requestAnimationFrame(gameLoop);
 }
 
+// ── INPUT ─────────────────────────────────────────────────────────────────────
+
 document.addEventListener('keydown',e=>{
   if(!alive)return;
   const d={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'}[e.key];
   if(d&&d!==opposite[direction])direction=d;
 });
 
-// ── SWIPE TO CHANGE DIRECTION ────────────────────────────────────────────────
 let touchStartX=0,touchStartY=0;
 canvas.addEventListener('touchstart',e=>{
   touchStartX=e.touches[0].clientX;
@@ -460,14 +486,15 @@ canvas.addEventListener('touchend',e=>{
   if(!alive)return;
   const dx=e.changedTouches[0].clientX-touchStartX;
   const dy=e.changedTouches[0].clientY-touchStartY;
-  if(Math.abs(dx)<10&&Math.abs(dy)<10)return; // too small, ignore
+  if(Math.abs(dx)<10&&Math.abs(dy)<10)return;
   let d;
   if(Math.abs(dx)>Math.abs(dy))d=dx>0?'right':'left';
   else d=dy>0?'down':'up';
   if(d!==opposite[direction])direction=d;
   e.preventDefault();
 },{passive:false});
-// ─────────────────────────────────────────────────────────────────────────────
+
+// ── START ─────────────────────────────────────────────────────────────────────
 
 function startGame(m){
   mode=m;
