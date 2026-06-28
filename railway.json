@@ -3,6 +3,6 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "gunicorn papeyonlinee.wsgi"
+    "startCommand": "python manage.py collectstatic --noinput && daphne papeyonlinee.asgi:application --port $PORT --bind 0.0.0.0"
   }
 }
