@@ -5,7 +5,7 @@
 <style>
 body{margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;overflow:hidden;font-family:'Courier New',monospace}
 #ui{position:fixed;top:10px;left:50%;transform:translateX(-50%);color:#0f0;font:bold 16px 'Courier New';background:#000;padding:4px 12px;border:2px solid #0f0;display:none;image-rendering:pixelated;letter-spacing:2px}
-#gameover{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);justify-content:center;align-items:center;flex-direction:column;color:#0f0;font:bold 48px 'Courier New';text-align:center;image-rendering:pixelated}
+#gameover{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);justify-content:center;align-items:center;flex-direction:column;color:#0f0;font:bold 48px 'Courier New';text-align:center}
 #gameover button{font-size:20px;margin-top:30px;padding:12px 32px;cursor:pointer;border:3px solid #0f0;border-radius:0;background:#000;color:#0f0;font-family:'Courier New';letter-spacing:2px}
 #gameover button:hover{background:#0f0;color:#000}
 #game{border:4px solid #333;display:none;image-rendering:pixelated;image-rendering:crisp-edges}
@@ -15,7 +15,6 @@ body{margin:0;background:#111;display:flex;justify-content:center;align-items:ce
 #modeSelect{display:flex;flex-direction:column;gap:20px;align-items:center}
 #modeSelect button{font:bold 20px 'Courier New';padding:16px 40px;cursor:pointer;border:3px solid #0f0;border-radius:0;background:#000;color:#0f0;letter-spacing:3px}
 #modeSelect button:hover{background:#0f0;color:#000}
-#scanlines{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);z-index:999}
 </style>
 </head>
 <body>
@@ -24,7 +23,7 @@ body{margin:0;background:#111;display:flex;justify-content:center;align-items:ce
     <button onclick="startGame('online')">Play Online</button>
     <div id="onlineStatus" style="color:#ccc;font:14px Arial;margin-top:6px;text-align:center">checking who's online…</div>
   </div>
-  <button style="padding: 8px;font:12px Arial " onclick="startGame('cpu')">Play vs CPUs</button>
+  <button style="padding:8px;font:12px Arial" onclick="startGame('cpu')">Play vs CPUs</button>
 </div>
 <div id="ui">0% covered</div>
 <div id="leaderboard"></div>
@@ -52,8 +51,7 @@ function nextFreeColor(){
   for(const c of COLORS)if(!usedColorSet.has(c))return claimColor(c);
   const h=Math.floor(Math.random()*360);
   const c=`hsl(${h},100%,50%)`;
-  usedColorSet.add(c);
-  return c;
+  usedColorSet.add(c);return c;
 }
 
 (function checkOnlineStatus(){
@@ -122,10 +120,7 @@ function scheduleReplacementCpu(deadColor){
   setTimeout(()=>{
     if(mode!=='cpu')return;
     const s=findFreeSpawnSpot();
-    if(s){
-      const color=nextFreeColor();
-      entities.push(makeEntity(s.x,s.y,color));
-    }
+    if(s){const color=nextFreeColor();entities.push(makeEntity(s.x,s.y,color));}
   },1500);
 }
 
@@ -141,57 +136,37 @@ function scoreCpuDir(cpu,d){
   if(p.x<3||p.x>W-7||p.y<3||p.y>H-7)return-Infinity;
   if(d===opposite[cpu.dir])return-Infinity;
   if(nearTrailPoint(cpu.trail,p.x+2,p.y+2,3))return-Infinity;
-
   const distHome=Math.hypot(p.x-cpu.homeX,p.y-cpu.homeY);
-  const curDist =Math.hypot(cpu.x-cpu.homeX,cpu.y-cpu.homeY);
+  const curDist=Math.hypot(cpu.x-cpu.homeX,cpu.y-cpu.homeY);
   const trailLen=cpu.trail.length;
-
   let score=0;
-  if(!cpu.outside){
-    score+=(distHome-curDist)*2;
-  } else if(trailLen<25){
-    score+=(distHome-curDist)*2;
-    if(d===cpu.dir)score+=1;
-  } else {
-    score+=(curDist-distHome)*3;
-    if(d===cpu.dir)score+=1;
-    if(trailLen>60)score+=(trailLen-60)*0.8;
-  }
+  if(!cpu.outside){score+=(distHome-curDist)*2;}
+  else if(trailLen<25){score+=(distHome-curDist)*2;if(d===cpu.dir)score+=1;}
+  else{score+=(curDist-distHome)*3;if(d===cpu.dir)score+=1;if(trailLen>60)score+=(trailLen-60)*0.8;}
   return score;
 }
 
 function chooseCpuDir(cpu){
   let best=null,bestScore=-Infinity;
-  for(const d of['left','right','up','down']){
-    const s=scoreCpuDir(cpu,d);
-    if(s>bestScore){bestScore=s;best=d;}
-  }
+  for(const d of['left','right','up','down']){const s=scoreCpuDir(cpu,d);if(s>bestScore){bestScore=s;best=d;}}
   return best;
 }
 
 function updateCpu(cpu){
   if(!cpu.alive)return;
   cpu.timer=(cpu.timer||0)+1;
-
   const currentBlocked=!cpu.dir||scoreCpuDir(cpu,cpu.dir)===-Infinity;
   const timeToRethink=cpu.timer>8+Math.random()*7;
   const nearWall=cpu.x<8||cpu.x>W-12||cpu.y<8||cpu.y>H-12;
   const trailTooLong=cpu.outside&&cpu.trail.length>35;
-
   if(currentBlocked||timeToRethink||nearWall||trailTooLong){
     const best=chooseCpuDir(cpu);
     if(best!==null){cpu.dir=best;cpu.timer=0;}
   }
-
-  if(scoreCpuDir(cpu,cpu.dir)===-Infinity){
-    const fallback=chooseCpuDir(cpu);
-    if(fallback)cpu.dir=fallback;
-  }
-
+  if(scoreCpuDir(cpu,cpu.dir)===-Infinity){const fallback=chooseCpuDir(cpu);if(fallback)cpu.dir=fallback;}
   const p=moved(cpu,cpu.dir||'right');
   cpu.x=Math.max(0,Math.min(W-4,p.x));
   cpu.y=Math.max(0,Math.min(H-4,p.y));
-
   if(!isInOwnTerritory(cpu))cpu.outside=true;
   if(cpu.outside&&isInOwnTerritory(cpu)){fillEnclosed(cpu);return;}
   if(cpu.outside&&checkOwnTrailHit(cpu)){const c=cpu.color;killEntity(cpu);scheduleReplacementCpu(c);return;}
@@ -200,50 +175,95 @@ function updateCpu(cpu){
   if(cpu.outside)cpu.trail.push({x:cpu.x+2,y:cpu.y+2});
 }
 
+// ── ONLINE MODE ──────────────────────────────────────────────────────────────
+
 function startOnlineMode(){
   try{
     const proto=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(`${proto}://${location.host}/ws/game/`);
+
     ws.onmessage=event=>{
       const data=JSON.parse(event.data);
 
+      // First message: our ID + existing players with their full territory
       if(data.myId){
         myId=data.myId;
-      }
-
-      for(const id in data){
-        if(id==='myId'||id==='room'||id==='totalOnline')continue;
-        if(id===myId)continue;
-        const state=data[id];
-        if(!remotePlayers[id]){
-          const color=nextFreeColor();
-          const rp=makeEntity(state.x,state.y,color);
-          remotePlayers[id]=rp;
-          entities.push(rp);
-        }
-        Object.assign(remotePlayers[id],{x:state.x,y:state.y,
-          trail:state.trail,outside:state.trail.length>0});
-      }
-
-      if(!('myId' in data)){
-        for(const id in remotePlayers){
-          if(!(id in data)){
-            releaseColor(remotePlayers[id].color);
-            entities.splice(entities.indexOf(remotePlayers[id]),1);
-            delete remotePlayers[id];
+        if(data.existing){
+          for(const id in data.existing){
+            const state=data.existing[id];
+            createOrUpdateRemote(id,state,true); // true = apply territory PNG
           }
+        }
+        return;
+      }
+
+      // Player left
+      if(data.__left__){
+        const id=data.__left__;
+        if(remotePlayers[id]){
+          releaseColor(remotePlayers[id].color);
+          entities.splice(entities.indexOf(remotePlayers[id]),1);
+          delete remotePlayers[id];
+        }
+        return;
+      }
+
+      // Regular broadcast: position + trail for all players in room
+      for(const id in data){
+        if(id===myId||id==='__left__')continue;
+        createOrUpdateRemote(id,data[id],false);
+      }
+
+      // Remove players who disappeared from the broadcast
+      for(const id in remotePlayers){
+        if(!(id in data)){
+          releaseColor(remotePlayers[id].color);
+          entities.splice(entities.indexOf(remotePlayers[id]),1);
+          delete remotePlayers[id];
         }
       }
     };
-  }catch(e){
-    console.error('WebSocket failed:',e);
+  }catch(e){console.error('WebSocket failed:',e);}
+}
+
+function createOrUpdateRemote(id,state,applyTerritory){
+  if(!remotePlayers[id]){
+    const color=nextFreeColor();
+    const rp=makeEntity(state.x||500,state.y||500,color);
+    remotePlayers[id]=rp;
+    entities.push(rp);
+  }
+  const rp=remotePlayers[id];
+  rp.x=state.x;
+  rp.y=state.y;
+  rp.trail=state.trail||[];
+  rp.outside=rp.trail.length>0;
+  rp.filledPixels=state.filledPixels||100;
+
+  // Apply persisted territory from a PNG snapshot (on join or after a fill)
+  if(applyTerritory&&state.territoryPng){
+    const img=new Image();
+    img.onload=()=>{
+      rp.ctx.clearRect(0,0,W,H);
+      rp.ctx.drawImage(img,0,0);
+    };
+    img.src=state.territoryPng;
   }
 }
 
-function sendMyState(){
-  if(ws&&ws.readyState===WebSocket.OPEN)
-    ws.send(JSON.stringify({x:player.x,y:player.y,trail:player.trail}));
+// Capture our territory canvas as a PNG data URL to send to server after fill
+function captureMyTerritory(){
+  return player.canvas.toDataURL('image/png');
 }
+
+function sendMyState(includePng){
+  if(!ws||ws.readyState!==WebSocket.OPEN)return;
+  const payload={x:player.x,y:player.y,trail:player.trail,filledPixels:player.filledPixels};
+  if(includePng)payload.territoryPng=captureMyTerritory();
+  ws.send(JSON.stringify(payload));
+}
+
+// ── SHARED GAME LOGIC ────────────────────────────────────────────────────────
 
 function isInOwnTerritory(e){
   const px=Math.floor(e.x+2),py=Math.floor(e.y+2);
@@ -307,8 +327,8 @@ function checkGotRunInto(self){
 function fillEnclosed(entity){
   if(entity.trail.length>1){
     entity.ctx.beginPath();
-    entity.ctx.strokeStyle=entity.color;
-    entity.ctx.lineWidth=4;entity.ctx.lineJoin='miter';entity.ctx.lineCap='square';
+    entity.ctx.strokeStyle=entity.color;entity.ctx.lineWidth=4;
+    entity.ctx.lineJoin='miter';entity.ctx.lineCap='square';
     entity.ctx.moveTo(entity.trail[0].x,entity.trail[0].y);
     for(let i=1;i<entity.trail.length;i++)entity.ctx.lineTo(entity.trail[i].x,entity.trail[i].y);
     entity.ctx.stroke();
@@ -324,21 +344,18 @@ function fillEnclosed(entity){
   const data=imageData.data;
   const outside=new Uint8Array(bw*bh);
   const stack=[];
-  for(let x=0;x<bw;x++){stack.push(x, bw*(bh-1)+x);}
-  for(let y=1;y<bh-1;y++){stack.push(y*bw, y*bw+bw-1);}
-
+  for(let x=0;x<bw;x++){stack.push(x,bw*(bh-1)+x);}
+  for(let y=1;y<bh-1;y++){stack.push(y*bw,y*bw+bw-1);}
   const tmp=document.createElement('canvas');tmp.width=tmp.height=1;
   const tc=tmp.getContext('2d');
   tc.fillStyle=entity.color;tc.fillRect(0,0,1,1);
   const[cr,cg,cb]=tc.getImageData(0,0,1,1).data;
-
   while(stack.length){
     const idx=stack.pop();
     if(idx<0||idx>=bw*bh||outside[idx]||data[idx*4+3]>0)continue;
     outside[idx]=1;
     stack.push(idx+1,idx-1,idx+bw,idx-bw);
   }
-
   let newlyFilled=0;
   for(let i=0;i<bw*bh;i++){
     if(!outside[i]){
@@ -349,9 +366,7 @@ function fillEnclosed(entity){
   }
   for(let i=0;i<bw*bh;i++){
     const pi=i*4;
-    if(data[pi+3]>0){
-      data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;
-    }
+    if(data[pi+3]>0){data[pi]=cr;data[pi+1]=cg;data[pi+2]=cb;data[pi+3]=100;}
   }
   entity.ctx.putImageData(imageData,bx,by);
   entity.filledPixels=(entity.filledPixels||0)+newlyFilled;
@@ -369,23 +384,28 @@ function fillEnclosed(entity){
   }
 
   entity.trail=[];entity.outside=false;
+
   if(entity===player){
     const pct=getPercent(player);
     ui.textContent=pct+'% covered';
     if(pct>=100)win();
+    // Send territory PNG to server so other players can see our fills
+    if(mode==='online')sendMyState(true);
   }
 }
 
-function syncRemoteCanvas(e){
-  e.ctx.clearRect(0,0,W,H);
-  e.ctx.fillStyle=e.color;e.ctx.globalAlpha=0.4;e.ctx.fillRect(e.x-5,e.y-5,10,10);
-  e.ctx.globalAlpha=1;e.ctx.strokeStyle=e.color;e.ctx.lineWidth=1;e.ctx.strokeRect(e.x-5,e.y-5,10,10);
-}
+// ── RENDERING ────────────────────────────────────────────────────────────────
 
+// For remote players: draw their territory canvas directly (it's kept current
+// by createOrUpdateRemote applying the territoryPng snapshot), then overlay
+// their live trail on top.
 function drawEntity(e){
   if(!e.alive)return;
-  if(mode==='online'&&e!==player)syncRemoteCanvas(e);
+
+  // Draw territory (their off-screen canvas, which holds filled zones)
   ctx.drawImage(e.canvas,0,0);
+
+  // Draw live trail stroked on the main canvas (not stored in their canvas)
   if(e.outside&&e.trail.length>1){
     ctx.beginPath();
     ctx.strokeStyle=e.color;ctx.lineWidth=4;ctx.lineJoin='miter';ctx.lineCap='square';
@@ -393,6 +413,8 @@ function drawEntity(e){
     for(let i=1;i<e.trail.length;i++)ctx.lineTo(e.trail[i].x,e.trail[i].y);
     ctx.stroke();
   }
+
+  // Draw player dot
   ctx.fillStyle='black';ctx.fillRect(e.x-1,e.y-1,6,6);
   ctx.fillStyle=e.color;ctx.fillRect(e.x,e.y,4,4);
 }
@@ -430,7 +452,7 @@ function gameLoop(){
   }
 
   if(mode==='cpu')entities.slice(1).forEach(updateCpu);
-  else sendMyState();
+  else sendMyState(false); // send position + trail every frame; PNG only after fills
 
   draw();
   updateLeaderboard();
