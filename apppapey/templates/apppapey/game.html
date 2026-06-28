@@ -58,7 +58,8 @@ function nextFreeColor(){
 
 (function checkOnlineStatus(){
   try{
-    const peek=new WebSocket(`ws://${location.host}/ws/game/`);
+    const proto=location.protocol==='https:'?'wss':'ws';
+    const peek=new WebSocket(`${proto}://${location.host}/ws/game/`);
     peek.onmessage=e=>{
       const d=JSON.parse(e.data);
       if('totalOnline' in d){
@@ -200,44 +201,43 @@ function updateCpu(cpu){
 }
 
 function startOnlineMode(){
-  ws=new WebSocket(`ws://${location.host}/ws/game/`);
-  ws.onmessage=event=>{
-    const data=JSON.parse(event.data);
+  try{
+    const proto=location.protocol==='https:'?'wss':'ws';
+    ws=new WebSocket(`${proto}://${location.host}/ws/game/`);
+    ws.onmessage=event=>{
+      const data=JSON.parse(event.data);
 
-    // Handle the initial handshake message (has myId + totalOnline)
-    if(data.myId){
-      myId=data.myId;
-      // Don't return — fall through in case players are also included,
-      // but typically this message has no player states so the loop below is a no-op.
-    }
-
-    // Process player states (any key that is a numeric player id)
-    for(const id in data){
-      if(id==='myId'||id==='room'||id==='totalOnline')continue;
-      if(id===myId)continue; // skip ourselves
-      const state=data[id];
-      if(!remotePlayers[id]){
-        const color=nextFreeColor();
-        const rp=makeEntity(state.x,state.y,color);
-        remotePlayers[id]=rp;
-        entities.push(rp);
+      if(data.myId){
+        myId=data.myId;
       }
-      Object.assign(remotePlayers[id],{x:state.x,y:state.y,
-        trail:state.trail,outside:state.trail.length>0});
-    }
 
-    // Remove players no longer in the broadcast
-    // Only prune when we have a real game-state message (not the handshake)
-    if(!('myId' in data)){
-      for(const id in remotePlayers){
-        if(!(id in data)){
-          releaseColor(remotePlayers[id].color);
-          entities.splice(entities.indexOf(remotePlayers[id]),1);
-          delete remotePlayers[id];
+      for(const id in data){
+        if(id==='myId'||id==='room'||id==='totalOnline')continue;
+        if(id===myId)continue;
+        const state=data[id];
+        if(!remotePlayers[id]){
+          const color=nextFreeColor();
+          const rp=makeEntity(state.x,state.y,color);
+          remotePlayers[id]=rp;
+          entities.push(rp);
+        }
+        Object.assign(remotePlayers[id],{x:state.x,y:state.y,
+          trail:state.trail,outside:state.trail.length>0});
+      }
+
+      if(!('myId' in data)){
+        for(const id in remotePlayers){
+          if(!(id in data)){
+            releaseColor(remotePlayers[id].color);
+            entities.splice(entities.indexOf(remotePlayers[id]),1);
+            delete remotePlayers[id];
+          }
         }
       }
-    }
-  };
+    };
+  }catch(e){
+    console.error('WebSocket failed:',e);
+  }
 }
 
 function sendMyState(){
