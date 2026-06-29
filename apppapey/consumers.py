@@ -144,3 +144,5 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             "__left__": event["player_id"],
         }))
+        
+#This code file was made with the help of AI
