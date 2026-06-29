@@ -3,11 +3,9 @@ import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 MAX_PLAYERS_PER_ROOM = 10
-BROADCAST_HZ = 20  # position updates per second
+BROADCAST_HZ = 20 
 
-rooms = {}  # room_name -> { player_id -> player_dict }
-
-# ── helpers ───────────────────────────────────────────────────────────────────
+rooms = {} 
 
 def total_players_online():
     return sum(len(p) for p in rooms.values())
@@ -27,9 +25,7 @@ def make_player_id():
     _next_id += 1
     return str(_next_id)
 
-# ── broadcast loop (one per room, runs as an asyncio task) ────────────────────
-
-room_tasks = {}  # room_name -> asyncio.Task
+room_tasks = {}  
 
 async def room_broadcast_loop(room_name, channel_layer):
     """Broadcast positions + trails at BROADCAST_HZ; skips territory PNGs."""
@@ -54,11 +50,8 @@ async def room_broadcast_loop(room_name, channel_layer):
     finally:
         room_tasks.pop(room_name, None)
 
-# ── consumer ──────────────────────────────────────────────────────────────────
-
 class GameConsumer(AsyncWebsocketConsumer):
 
-    # ── lifecycle ─────────────────────────────────────────────────────────────
 
     async def connect(self):
         self.player_id = make_player_id()
@@ -67,16 +60,15 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_name, self.channel_name)
         await self.accept()
 
-        # Register this player
+  
         rooms[self.room_name][self.player_id] = {
             "x": 500, "y": 500,
             "trail": [],
             "filledPixels": 100,
-            "territoryPng": None,  # stored server-side; only sent to newcomers
+            "territoryPng": None,  
         }
 
-        # Send identity + full state of existing players (including territory PNGs
-        # so the newcomer can render everyone's filled zones from the start)
+      
         existing = {
             pid: {k: v for k, v in pdata.items()}
             for pid, pdata in rooms[self.room_name].items()
@@ -89,10 +81,9 @@ class GameConsumer(AsyncWebsocketConsumer):
             "existing":    existing,
         }))
 
-        # Also tell the new player the totalOnline count (caught by lobby peek too)
+       
         await self.send(text_data=json.dumps({"totalOnline": total_players_online()}))
 
-        # Start the room's broadcast loop if not already running
         if self.room_name not in room_tasks or room_tasks[self.room_name].done():
             task = asyncio.create_task(
                 room_broadcast_loop(self.room_name, self.channel_layer)
@@ -108,7 +99,6 @@ class GameConsumer(AsyncWebsocketConsumer):
         if not room_players:
             rooms.pop(self.room_name, None)
         else:
-            # Notify remaining players that this player left
             await self.channel_layer.group_send(self.room_name, {
                 "type": "player_left",
                 "player_id": self.player_id,
@@ -127,8 +117,6 @@ class GameConsumer(AsyncWebsocketConsumer):
         if "filledPixels" in data:
             p["filledPixels"] = data["filledPixels"]
 
-        # Territory PNG — only sent after a fill, forward immediately (it's big,
-        # don't include it in the normal broadcast loop)
         if "territoryPng" in data:
             p["territoryPng"] = data["territoryPng"]
             await self.channel_layer.group_send(self.room_name, {
@@ -137,7 +125,6 @@ class GameConsumer(AsyncWebsocketConsumer):
                 "territoryPng": data["territoryPng"],
             })
 
-    # ── group message handlers ────────────────────────────────────────────────
 
     async def game_positions(self, event):
         """Periodic position broadcast — sent to every player in the room."""

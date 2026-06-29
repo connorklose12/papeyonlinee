@@ -54,7 +54,6 @@ function nextFreeColor(){
   usedColorSet.add(c);return c;
 }
 
-// ── Lobby online status peek ──────────────────────────────────────────────────
 (function checkOnlineStatus(){
   try{
     const proto=location.protocol==='https:'?'wss':'ws';
@@ -179,7 +178,7 @@ function updateCpu(cpu){
   if(cpu.outside)cpu.trail.push({x:cpu.x+2,y:cpu.y+2});
 }
 
-// ── ONLINE MODE ───────────────────────────────────────────────────────────────
+// FOR THE ONLINE MODE
 
 function startOnlineMode(){
   const proto=location.protocol==='https:'?'wss':'ws';
@@ -192,17 +191,17 @@ function startOnlineMode(){
   ws.onmessage=event=>{
     const data=JSON.parse(event.data);
 
-    // ── identity + existing players ──
+    // identity + existing players
     if(data.myId){
       myId=data.myId;
       if(data.existing){
         const existingIds=Object.keys(data.existing);
         if(existingIds.length===0){
-          // No existing players — move player to a random free spot now
+          // No existing players moves player to a random free spot
           const s=findFreeSpawnSpot();
           if(s) movePlayerTo(s.x,s.y);
         } else {
-          // Load all territory PNGs, then pick a free spawn once they're all drawn
+          // Loads all territory PNGs, then pick a free spawn once they're all drawn
           let pending=existingIds.length;
           for(const id of existingIds){
             const state=data.existing[id];
@@ -224,10 +223,10 @@ function startOnlineMode(){
       return;
     }
 
-    // ── online-count update (also sent after connect) ──
+    // online-count update (also sent after connect)
     if('totalOnline' in data) return;
 
-    // ── territory PNG pushed after another player fills ──
+    // territory PNG pushed after another player fills
     if(data.__territory__){
       const rp=remotePlayers[data.__territory__];
       if(rp&&data.territoryPng){
@@ -238,7 +237,7 @@ function startOnlineMode(){
       return;
     }
 
-    // ── player left ──
+    // player left
     if(data.__left__){
       const id=data.__left__;
       if(remotePlayers[id]){
@@ -249,12 +248,12 @@ function startOnlineMode(){
       return;
     }
 
-    // ── regular position broadcast ──
+    // regular position broadcast 
     for(const id in data){
       if(id===myId)continue;
       createOrUpdateRemote(id,data[id],false);
     }
-    // remove players absent from this broadcast
+    // remove players not in this broadcast
     for(const id in remotePlayers){
       if(!(id in data)){
         releaseColor(remotePlayers[id].color);
@@ -310,7 +309,7 @@ function sendMyState(includePng){
   try{ ws.send(JSON.stringify(payload)); }catch(e){}
 }
 
-// ── SHARED GAME LOGIC ─────────────────────────────────────────────────────────
+// SHARED GAME LOGIC BETWEEN BOTH THE MODES
 
 function isInOwnTerritory(e){
   const px=Math.floor(e.x+2),py=Math.floor(e.y+2);
@@ -440,7 +439,7 @@ function fillEnclosed(entity){
   }
 }
 
-// ── RENDERING ─────────────────────────────────────────────────────────────────
+//RENDERING
 
 function drawEntity(e){
   if(!e.alive)return;
@@ -496,7 +495,7 @@ function gameLoop(){
   requestAnimationFrame(gameLoop);
 }
 
-// ── INPUT ─────────────────────────────────────────────────────────────────────
+// INPUTS
 
 document.addEventListener('keydown',e=>{
   if(!alive)return;
@@ -522,7 +521,7 @@ canvas.addEventListener('touchend',e=>{
   e.preventDefault();
 },{passive:false});
 
-// ── START ─────────────────────────────────────────────────────────────────────
+// START
 
 function startGame(m){
   mode=m;
