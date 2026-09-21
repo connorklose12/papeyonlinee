@@ -1,8 +1,11 @@
 [phases.setup]
 nixPkgs = ["python310", "nodejs-18_x"]
+nixLibs = []
 
 [phases.install]
-cmds = ["npm ci", "pip install -r requirements.txt"]
+cmds = ["npm ci",   "python -m ensurepip --upgrade",
+  "python -m pip install --upgrade pip",
+   "pip install -r requirements.txt"]
 
 [start]
 cmd = "daphne -b 0.0.0.0 -p $PORT mygame.asgi:application"
