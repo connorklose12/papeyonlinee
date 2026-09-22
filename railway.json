@@ -1,8 +1,6 @@
 {
-  "build": {
-    "builder": "NIXPACKS"
-  },
+  "build": { "builder": "NIXPACKS" },
   "deploy": {
-    "startCommand": "python manage.py collectstatic --noinput && daphne papeyonlinee.asgi:application --port $PORT --bind 0.0.0.0"
+    "startCommand": "python manage.py collectstatic --noinput && python3 -m daphne -b 0.0.0.0 -p $PORT papeyonlinee.asgi:application"
   }
 }
