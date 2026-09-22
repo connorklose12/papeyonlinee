@@ -1,1 +1,1 @@
-web: daphne papeyonlinee.asgi:application --port $PORT --bind 0.0.0.0
+web: python3 -m daphne -b 0.0.0.0 -p $PORT papeyonlinee.asgi:application
