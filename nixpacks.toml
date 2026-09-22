@@ -5,4 +5,4 @@ nixPkgs = ["python312", "python312Packages.pip"]
 cmds = ["pip install --break-system-packages -r requirements.txt"]
 
 [start]
-cmd = "daphne -b 0.0.0.0 -p $PORT papeyonlinee.asgi:application"
+cmd = "python3 -m daphne -b 0.0.0.0 -p $PORT papeyonlinee.asgi:application"
