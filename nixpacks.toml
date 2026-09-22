@@ -2,10 +2,7 @@
 nixPkgs = ["python310"]
 
 [phases.install]
-cmds = ["python3 -m ensurepip --upgrade", "pip install -r requirements.txt"]
+cmds = ["pip install --break-system-packages -r requirements.txt"]
 
 [start]
 cmd = "daphne -b 0.0.0.0 -p $PORT papeyonlinee.asgi:application"
-
-[variables]
-PIP_BREAK_SYSTEM_PACKAGES = "1"
